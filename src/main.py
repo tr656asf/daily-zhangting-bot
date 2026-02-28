@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-主程序：百度搜索财联社涨停分析并推送到Telegram
+主程序：使用AkShare获取涨停数据并推送到Telegram
 """
 
 import os
@@ -35,14 +35,13 @@ def send_to_telegram(content):
             logger.error("未配置 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID")
             return False
         
-        # 直接发送原文，不做额外格式化
         bot = Bot(token=token)
         
         async def send():
             await bot.send_message(
                 chat_id=chat_id,
                 text=content,
-                parse_mode=None  # 不解析markdown/html，原样发送
+                parse_mode=None  # 纯文本，不解析格式
             )
         
         asyncio.run(send())
@@ -57,7 +56,7 @@ def send_to_telegram(content):
 def main():
     """主函数"""
     logger.info("=" * 50)
-    logger.info("财联社涨停分析推送")
+    logger.info("涨停分析报告推送")
     logger.info("=" * 50)
     
     # 检查是否是工作日
@@ -65,18 +64,17 @@ def main():
         logger.info("今天是周末，不运行")
         return True
     
-    # 导入scraper
+    # 导入数据获取模块
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from scraper import WebScraper
+    from data_fetcher import get_zt_data
     
     # 获取数据
-    logger.info("开始获取涨停分析...")
-    scraper = WebScraper()
-    result = scraper.fetch_zhangting_analysis()
+    logger.info("开始获取涨停数据...")
+    result = get_zt_data()
     
-    content = result['items'][0] if result['items'] else '无内容'
+    content = result['items'][0] if result['items'] else '无数据'
     
-    logger.info(f"获取到的内容：{content[:200]}...")
+    logger.info(f"获取到的内容：{content}")
     
     # 发送到Telegram
     logger.info("发送到 Telegram...")
