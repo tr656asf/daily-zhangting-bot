@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-主程序：使用Playwright爬取财联社涨停分析并推送到Telegram
+主程序：百度搜索财联社涨停分析并推送到Telegram
 """
 
 import os
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def is_workday(check_date=None):
     """检查是否是工作日（周一到周五）"""
-    # 如果设置了 FORCE_RUN=1，则跳过周末检查（用于测试）
+    # 如果设置了 FORCE_RUN=1，则跳过周末检查
     if os.getenv('FORCE_RUN') == '1':
         logger.info("强制运行模式（跳过周末检查）")
         return True
@@ -70,31 +70,31 @@ def send_to_telegram(content):
 def main():
     """主函数"""
     logger.info("=" * 50)
-    logger.info("财联社涨停分析推送（Playwright版）")
+    logger.info("财联社涨停分析推送")
     logger.info("=" * 50)
     
     # 导入数据获取模块
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
     from data_fetcher import get_zhangting_analysis
     
-    # 检查是否有模拟日期（用于测试）
-    simulate_date_str = os.getenv('SIMULATE_DATE')
-    simulate_date = None
-    if simulate_date_str:
+    # 检查是否有指定日期（用于测试）
+    target_date_str = os.getenv('SIMULATE_DATE')
+    target_date = None
+    if target_date_str:
         try:
-            simulate_date = datetime.strptime(simulate_date_str, '%Y-%m-%d')
-            logger.info(f"【测试模式】模拟日期：{simulate_date_str}")
+            target_date = datetime.strptime(target_date_str, '%Y-%m-%d')
+            logger.info(f"指定日期：{target_date_str}")
         except ValueError:
-            logger.error(f"模拟日期格式错误：{simulate_date_str}，应为 YYYY-MM-DD")
+            logger.error(f"日期格式错误：{target_date_str}，应为 YYYY-MM-DD")
     
-    # 检查是否是工作日（传入模拟日期）
-    if not is_workday(check_date=simulate_date):
+    # 检查是否是工作日
+    if not is_workday(check_date=target_date):
         logger.info("该日期是周末，不运行")
         return True
     
     # 获取数据
     logger.info("开始获取涨停分析...")
-    result = get_zhangting_analysis(simulate_date=simulate_date)
+    result = get_zhangting_analysis(target_date=target_date)
     
     content = result['items'][0] if result['items'] else None
     

@@ -17,7 +17,7 @@ on:
           - '0'
           - '1'
       simulate_date:
-        description: '模拟日期（用于测试，格式：YYYY-MM-DD）'
+        description: '指定日期（用于测试，格式：YYYY-MM-DD）'
         required: false
         default: ''
         type: string
@@ -29,6 +29,8 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FORCE_RUN: ${{ github.event.inputs.force_run || '0' }}
+      SIMULATE_DATE: ${{ github.event.inputs.simulate_date || '' }}
     
     steps:
     - name: Checkout code
@@ -44,11 +46,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Install Playwright browsers (if not simulate mode)
-      if: ${{ github.event.inputs.simulate_date == '' }}
-      run: |
-        playwright install chromium
-    
     - name: Check configuration
       run: |
         echo "检查配置..."
@@ -60,19 +57,13 @@ jobs:
           echo "❌ 错误：TELEGRAM_CHAT_ID 未设置"
           exit 1
         fi
+        if [ -n "$SIMULATE_DATE" ]; then
+          echo "📅 指定日期：$SIMULATE_DATE"
+        fi
         echo "✅ 配置正常"
     
     - name: Run report
-      env:
-        FORCE_RUN: ${{ github.event.inputs.force_run || '0' }}
-        SIMULATE_DATE: ${{ github.event.inputs.simulate_date || '' }}
       run: |
         echo "开始运行..."
-        if [ "$FORCE_RUN" = "1" ]; then
-          echo "⚠️ 强制运行模式"
-        fi
-        if [ -n "$SIMULATE_DATE" ]; then
-          echo "📅 模拟日期：$SIMULATE_DATE"
-        fi
         cd src
         python main.py

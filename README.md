@@ -1,20 +1,12 @@
 # 财联社涨停分析推送
 
-每天下午5点自动爬取财联社涨停分析，推送到 Telegram。
+每天下午5点自动百度搜索财联社涨停分析，推送到 Telegram。
 
 ## 工作原理
 
-1. 🔍 **访问财联社搜索页**：`https://www.cls.cn/searchPage?keyword=X月X日涨停分析`
-2. 🔗 **查找文章**：找到标题为"【X月X日涨停分析】"的文章
-3. 📄 **打开文章页**：使用 Playwright 模拟浏览器访问
-4. 📋 **提取内容**：提取文章正文内容
-5. 📱 **推送**：原样发送到 Telegram
-
-## 技术栈
-
-- **Playwright**：模拟浏览器，获取动态渲染内容
-- **python-telegram-bot**：Telegram 推送
-- **GitHub Actions**：定时运行
+1. 🔍 **百度搜索**：搜索"【X月X日涨停分析】财联社"
+2. 📄 **解析结果**：从搜索结果中提取em标签内容
+3. 📱 **推送**：将提取的文本原样发送到 Telegram
 
 ## 部署步骤
 
@@ -42,18 +34,15 @@ Actions → Daily Report → Run workflow
 - **运行时间**：工作日每天北京时间 **17:00**（下午5点）
 - **自动跳过**：周末（周六、周日）
 
-## 本地测试
+## 测试参数
 
-```bash
-# 安装依赖
-pip install -r requirements.txt
-playwright install chromium
+手动运行时可设置：
+- **force_run**: `1` - 强制运行（跳过周末检查）
+- **simulate_date**: `2026-02-05` - 指定日期（格式：YYYY-MM-DD）
 
-# 设置环境变量
-export TELEGRAM_BOT_TOKEN="你的token"
-export TELEGRAM_CHAT_ID="你的chat_id"
+## 技术栈
 
-# 运行
-cd src
-python main.py
-```
+- Python 3.11
+- requests + BeautifulSoup（百度搜索和解析）
+- python-telegram-bot（推送）
+- GitHub Actions（定时任务）
