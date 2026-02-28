@@ -16,18 +16,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def is_workday():
-    """检查今天是否是工作日（周一到周五）"""
+def is_workday(check_date=None):
+    """检查是否是工作日（周一到周五）"""
     # 如果设置了 FORCE_RUN=1，则跳过周末检查（用于测试）
     if os.getenv('FORCE_RUN') == '1':
         logger.info("强制运行模式（跳过周末检查）")
         return True
     
-    weekday = datetime.now().weekday()
+    # 使用指定日期或当前日期
+    if check_date is None:
+        check_date = datetime.now()
+    
+    weekday = check_date.weekday()
     is_weekday = weekday < 5
     
     weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-    logger.info(f"今天是 {weekdays[weekday]}，{'工作日' if is_weekday else '周末'}")
+    logger.info(f"日期 {check_date.strftime('%Y-%m-%d')} 是 {weekdays[weekday]}，{'工作日' if is_weekday else '周末'}")
     
     return is_weekday
 
@@ -69,18 +73,28 @@ def main():
     logger.info("财联社涨停分析推送（Playwright版）")
     logger.info("=" * 50)
     
-    # 检查是否是工作日
-    if not is_workday():
-        logger.info("今天是周末，不运行")
-        return True
-    
     # 导入数据获取模块
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
     from data_fetcher import get_zhangting_analysis
     
+    # 检查是否有模拟日期（用于测试）
+    simulate_date_str = os.getenv('SIMULATE_DATE')
+    simulate_date = None
+    if simulate_date_str:
+        try:
+            simulate_date = datetime.strptime(simulate_date_str, '%Y-%m-%d')
+            logger.info(f"【测试模式】模拟日期：{simulate_date_str}")
+        except ValueError:
+            logger.error(f"模拟日期格式错误：{simulate_date_str}，应为 YYYY-MM-DD")
+    
+    # 检查是否是工作日（传入模拟日期）
+    if not is_workday(check_date=simulate_date):
+        logger.info("该日期是周末，不运行")
+        return True
+    
     # 获取数据
     logger.info("开始获取涨停分析...")
-    result = get_zhangting_analysis()
+    result = get_zhangting_analysis(simulate_date=simulate_date)
     
     content = result['items'][0] if result['items'] else None
     

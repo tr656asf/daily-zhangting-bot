@@ -13,12 +13,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_zhangting_analysis():
+def get_zhangting_analysis(simulate_date=None):
     """
     获取当天涨停分析（使用Playwright爬取财联社）
     搜索格式：【X月X日涨停分析】财联社X月X日电
+    
+    Args:
+        simulate_date: 模拟日期，格式为 datetime 对象，用于测试
     """
-    today = datetime.now()
+    if simulate_date:
+        today = simulate_date
+        logger.info(f"【模拟模式】使用日期：{today.strftime('%Y-%m-%d')}")
+    else:
+        today = datetime.now()
+    
     month = today.month
     day = today.day
     date_str = f"{month}月{day}日"
