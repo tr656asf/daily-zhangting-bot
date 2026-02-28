@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-主程序：使用AkShare获取涨停数据并推送到Telegram
+主程序：使用Playwright爬取财联社涨停分析并推送到Telegram
 """
 
 import os
@@ -41,7 +41,7 @@ def send_to_telegram(content):
             await bot.send_message(
                 chat_id=chat_id,
                 text=content,
-                parse_mode=None  # 纯文本，不解析格式
+                parse_mode=None  # 纯文本，原样发送
             )
         
         asyncio.run(send())
@@ -56,7 +56,7 @@ def send_to_telegram(content):
 def main():
     """主函数"""
     logger.info("=" * 50)
-    logger.info("涨停分析报告推送")
+    logger.info("财联社涨停分析推送（Playwright版）")
     logger.info("=" * 50)
     
     # 检查是否是工作日
@@ -66,15 +66,15 @@ def main():
     
     # 导入数据获取模块
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from data_fetcher import get_zt_data
+    from data_fetcher import get_zhangting_analysis
     
     # 获取数据
-    logger.info("开始获取涨停数据...")
-    result = get_zt_data()
+    logger.info("开始获取涨停分析...")
+    result = get_zhangting_analysis()
     
     content = result['items'][0] if result['items'] else '无数据'
     
-    logger.info(f"获取到的内容：{content}")
+    logger.info(f"获取到的内容前200字：{content[:200]}...")
     
     # 发送到Telegram
     logger.info("发送到 Telegram...")
