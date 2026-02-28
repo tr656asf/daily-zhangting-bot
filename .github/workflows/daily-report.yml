@@ -7,6 +7,15 @@ on:
   
   # 手动触发
   workflow_dispatch:
+    inputs:
+      force_run:
+        description: '强制运行（跳过周末检查）'
+        required: false
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
 
 jobs:
   report:
@@ -48,7 +57,12 @@ jobs:
         echo "✅ 配置正常"
     
     - name: Run report
+      env:
+        FORCE_RUN: ${{ github.event.inputs.force_run || '0' }}
       run: |
         echo "开始运行..."
+        if [ "$FORCE_RUN" = "1" ]; then
+          echo "⚠️ 强制运行模式"
+        fi
         cd src
         python main.py

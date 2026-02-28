@@ -18,8 +18,18 @@ logger = logging.getLogger(__name__)
 
 def is_workday():
     """检查今天是否是工作日（周一到周五）"""
+    # 如果设置了 FORCE_RUN=1，则跳过周末检查（用于测试）
+    if os.getenv('FORCE_RUN') == '1':
+        logger.info("强制运行模式（跳过周末检查）")
+        return True
+    
     weekday = datetime.now().weekday()
-    return weekday < 5
+    is_weekday = weekday < 5
+    
+    weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    logger.info(f"今天是 {weekdays[weekday]}，{'工作日' if is_weekday else '周末'}")
+    
+    return is_weekday
 
 
 def send_to_telegram(content):
@@ -72,9 +82,14 @@ def main():
     logger.info("开始获取涨停分析...")
     result = get_zhangting_analysis()
     
-    content = result['items'][0] if result['items'] else '无数据'
+    content = result['items'][0] if result['items'] else None
     
-    logger.info(f"获取到的内容前200字：{content[:200]}...")
+    if not content:
+        logger.error("获取到的内容为空！")
+        return False
+    
+    logger.info(f"获取成功，内容长度：{len(content)}")
+    logger.info(f"内容预览：{content[:200]}...")
     
     # 发送到Telegram
     logger.info("发送到 Telegram...")
