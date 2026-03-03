@@ -24,11 +24,11 @@ def get_zhangting_analysis(target_date=None):
     """
     # 确定日期
     if target_date is None:
-        target_date = datetime.now()
-        year = target_date.year
-   month = target_date.month
-  day = target_date.day
-  date_str = f"{year}年{month}月{day}日"  # → "2026年3月3日"
+target_date = datetime.now()
+year = target_date.year
+month = target_date.month
+day = target_date.day
+date_str = f"{year}年{month}月{day}日"  # → "2026年3月3日"
     
     logger.info(f"获取 {date_str} 的涨停分析...")
     
