@@ -28,7 +28,7 @@ def get_zhangting_analysis(target_date=None):
     
     month = target_date.month
     day = target_date.day
-    date_str = f"{month}月{day}日"
+    date_str = f"{month}月{day}日"  # → "3月3日"
     
     logger.info(f"获取 {date_str} 的涨停分析...")
     
