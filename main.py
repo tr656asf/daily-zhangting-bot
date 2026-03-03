@@ -26,36 +26,48 @@ def send_telegram(text):
         print(f"发送消息失败: {e}")
 
 def fetch_cls_data(date_str):
-    # 1. 构造关键词
     keyword = f"{date_str}涨停分析"
-    
-    # 2. 直接请求财联社的搜索接口 (这是他们后台真正的地址)
-    # rn=1 表示我们只需要第一条结果
+    # 尝试使用财联社另一个更稳定的 API 路径
     api_url = f"https://www.cls.cn/nodeapi/search?keyword={keyword}&type=telegraph&rn=1&os=web"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.cls.cn/searchPage"
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Content-Type": "application/json",
+        "Referer": "https://www.cls.cn/searchPage",
+        "Origin": "https://www.cls.cn"
     }
 
     try:
         response = requests.get(api_url, headers=headers, timeout=15)
-        data = response.json() # 直接解析成 JSON 字典
         
-        # 3. 提取内容 (顺着数据层级往下找)
-        # 财联社的接口返回结构是 data -> telegraph -> list -> [0] -> content
+        # 核心调试步骤：如果状态码不是 200，说明被拦截了
+        if response.status_code != 200:
+            return f"请求被拦截！状态码: {response.status_code}。可能是 GitHub IP 被封锁。"
+
+        # 检查返回内容是否为空
+        if not response.text.strip():
+            return f"服务器返回内容为空，可能该时段没有数据。"
+
+        # 尝试解析 JSON
+        try:
+            data = response.json()
+        except Exception:
+            # 如果解析失败，打印前 100 个字符看看对方返回了什么（通常是 HTML 报错页）
+            return f"解析 JSON 失败。返回内容预览: {response.text[:100]}"
+        
         telegraph_list = data.get('data', {}).get('telegraph', {}).get('list', [])
         
         if telegraph_list:
             content = telegraph_list[0].get('content', '')
-            # 清理一下 HTML 标签（如果有的话）
             clean_content = BeautifulSoup(content, "html.parser").get_text()
             return f"【财联社 {date_str} 涨停分析】\n\n{clean_content}"
         else:
-            return f"未能找到 {date_str} 的涨停分析内容。原因：当天可能尚未发布或关键词无结果。"
+            return f"未找到 {date_str} 的内容。搜索接口返回列表为空。"
             
     except Exception as e:
-        return f"接口请求出错: {str(e)}"
+        return f"爬取出错: {str(e)}"
 
 def main():
     # 1. 获取北京时间
