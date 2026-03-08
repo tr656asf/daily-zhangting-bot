@@ -24,22 +24,20 @@ def send_tg_msg(text):
 def get_target_date():
     if DEBUG_DATE and DEBUG_DATE.strip():
         return DEBUG_DATE.strip()
-    return datetime.datetime.now().strftime('%Y-%m-%d')
+    # 考虑北京时间
+    return (datetime.datetime.now() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d')
 
 def is_trading_day(date_str):
     if DEBUG_DATE:
         print(f"🛠 调试模式：强制判定 {date_str} 为交易日")
         return True
     try:
-        # 使用本地逻辑判断周末，减少对 API 的依赖
         dt = datetime.datetime.strptime(date_str, '%Y-%m-%d')
         if dt.weekday() >= 5: return False
-        
-        # 进一步检查法定节假日
         resp = requests.get(f"https://timor.tech/api/holiday/info/{date_str}", timeout=10)
         return resp.json()['type']['type'] == 0
     except:
-        return True # 出错时默认运行，防止错过抓取
+        return True 
 
 def scrape():
     target_date_str = get_target_date()
@@ -47,66 +45,52 @@ def scrape():
     date_keyword = f"{dt_obj.month}月{dt_obj.day}日"
     
     with sync_playwright() as p:
-        # 1. 模拟真实浏览器指纹
         browser = p.chromium.launch(headless=True)
-        # 设置 User-Agent 为真实的 Chrome 浏览器
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': 1280, 'height': 800}
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         page = context.new_page()
-        
-        print(f"🚀 正在尝试访问财联社 (目标日期: {date_keyword})...")
-        
-        # 2. 增加重试逻辑和等待条件
-        try:
-            page.goto("https://www.cls.cn/telegraph", wait_until="domcontentloaded", timeout=60000)
-            # 等待具体的电报列表 DOM 元素出现
-            page.wait_for_selector(".telegraph-list", timeout=30000)
-            # 额外等待 3 秒确保 JS 渲染完毕
-            page.wait_for_timeout(3000) 
-        except Exception as e:
-            print(f"⚠️ 页面加载超时或元素未发现: {e}")
 
-        # 3. 即使加载了 0 条，也强行滚动一下尝试触发加载
-        page.evaluate("window.scrollTo(0, 1000)")
-        page.wait_for_timeout(2000)
-
-        # 4. 获取电报条目
-        items = page.locator(".telegraph-list .item").all()
-        print(f"📋 当前页面成功捕获条目数: {len(items)}")
-
-        # 调试：如果还是 0，打印当前页面标题，确认是否跳到了验证码页面
-        if len(items) == 0:
-            print(f"🔎 页面标题为: {page.title()}")
-            # 截图保存（在 GitHub Actions 中可以通过 Artifacts 查看，但这里我们先打印 HTML 长度）
-            content_len = len(page.content())
-            print(f"📄 页面源代码长度: {content_len}")
-
+        print(f"🚀 正在通过 API 拦截模式访问财联社 (目标: {date_keyword})...")
         target_text = ""
-        for item in items:
-            text = item.inner_text()
-            if "全市场共" in text and "涨停" in text and date_keyword in text:
-                target_text = text
-                break
+
+        # API 拦截逻辑
+        def handle_response(response):
+            nonlocal target_text
+            if "telegraph" in response.url and response.status == 200:
+                try:
+                    json_data = response.json()
+                    for item in json_data.get('data', {}).get('roll_data', []):
+                        content = item.get('content', '')
+                        if "全市场共" in content and "涨停" in content and date_keyword in content:
+                            target_text = content
+                            print("✅ 已从 API 响应中截获目标数据！")
+                except:
+                    pass
+
+        page.on("response", handle_response)
+        page.goto("https://www.cls.cn/telegraph", wait_until="networkidle", timeout=60000)
         
+        if not target_text:
+            print("💡 第一页未找到，正在向下滚动触发加载...")
+            for _ in range(12): # 增加滚动次数以找回旧数据
+                page.mouse.wheel(0, 3000)
+                page.wait_for_timeout(1000)
+                if target_text: break
+
         browser.close()
         
         if not target_text:
-            raise Exception(f"🔎 在 {len(items)} 条电报中未发现 {date_keyword} 的总结数据。页面可能触发了验证码或加载失败。")
+            raise Exception(f"🔎 未发现 {date_keyword} 的总结电报。")
 
-        # ... 后续正则解析保持不变 ...
-        
-        if not target_text:
-            raise Exception(f"未找到 {date_keyword} 的相关数据条目")
-
-        # 正则解析
+        # --- 核心解析逻辑 ---
         try:
-            zt = re.search(r"共(\d+)股涨停", target_text).group(1)
-            lb = re.search(r"连板股总数(\d+)只", target_text).group(1)
-            fail = re.search(r"(\d+)股封板未遂", target_text).group(1)
-            rate = re.search(r"封板率为(\d+%)", target_text).group(1)
-            focus = re.search(r"焦点股方面，(.*?)。", target_text).group(1)
+            # 这里的正则增加了对空格和换行的兼容
+            zt = re.search(r"共\s*(\d+)\s*股涨停", target_text).group(1)
+            lb = re.search(r"连板股总数\s*(\d+)\s*只", target_text).group(1)
+            fail = re.search(r"(\d+)\s*股封板未遂", target_text).group(1)
+            rate = re.search(r"封板率为\s*(\d+%)", target_text).group(1)
+            focus = re.search(r"焦点股方面，(.*?)(?:。|$)", target_text, re.S).group(1).strip()
             
             return (f"📊 财联社盘后分析 ({date_keyword})\n\n"
                     f"✅ 涨停总数：{zt}\n"
@@ -115,7 +99,7 @@ def scrape():
                     f"📈 封板率：{rate}\n\n"
                     f"🔥 焦点股：\n{focus}")
         except Exception as e:
-            raise Exception(f"解析文本失败: {e}\n原文内容: {target_text[:50]}...")
+            raise Exception(f"解析失败: {e}\n抓取内容: {target_text[:50]}...")
 
 if __name__ == "__main__":
     t_date = get_target_date()
@@ -128,6 +112,6 @@ if __name__ == "__main__":
             err_msg = f"❌ 抓取失败: {str(e)}"
             print(err_msg)
             send_tg_msg(err_msg)
-            sys.exit(1) # 只有真正的错误才抛出 exit 1
+            sys.exit(1)
     else:
         send_tg_msg(f"💤 {t_date} 非交易日，程序已休眠。")
