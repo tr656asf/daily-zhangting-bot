@@ -3,6 +3,7 @@ import requests
 import datetime
 import re
 import sys
+from urllib.parse import quote
 from playwright.sync_api import sync_playwright
 
 # 配置信息
@@ -15,103 +16,110 @@ def send_tg_msg(text):
         print("❌ 错误: 未配置 TG_TOKEN 或 TG_CHAT_ID")
         return
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    payload = {"chat_id": TG_CHAT_ID, "text": text}
     try:
-        requests.post(url, json=payload, timeout=10)
+        requests.post(url, json={"chat_id": TG_CHAT_ID, "text": text}, timeout=10)
     except Exception as e:
         print(f"发送消息失败: {e}")
 
 def get_target_date():
     if DEBUG_DATE and DEBUG_DATE.strip():
         return DEBUG_DATE.strip()
-    # 考虑北京时间
     return (datetime.datetime.now() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d')
 
-def is_trading_day(date_str):
-    if DEBUG_DATE:
-        print(f"🛠 调试模式：强制判定 {date_str} 为交易日")
-        return True
-    try:
-        dt = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-        if dt.weekday() >= 5: return False
-        resp = requests.get(f"https://timor.tech/api/holiday/info/{date_str}", timeout=10)
-        return resp.json()['type']['type'] == 0
-    except:
-        return True 
-
-def scrape():
-    target_date_str = get_target_date()
-    dt_obj = datetime.datetime.strptime(target_date_str, '%Y-%m-%d')
-    date_keyword = f"{dt_obj.month}月{dt_obj.day}日"
-    
+# --- 方案 A: 财联社 API 拦截 ---
+def scrape_cls_direct(date_keyword):
+    print(f"🚀 [方案 A] 尝试直接访问财联社 (关键词: {date_keyword})...")
+    target_text = ""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         page = context.new_page()
 
-        print(f"🚀 正在通过 API 拦截模式访问财联社 (目标: {date_keyword})...")
-        target_text = ""
-
-        # API 拦截逻辑
         def handle_response(response):
             nonlocal target_text
             if "telegraph" in response.url and response.status == 200:
                 try:
-                    json_data = response.json()
-                    for item in json_data.get('data', {}).get('roll_data', []):
+                    for item in response.json().get('data', {}).get('roll_data', []):
                         content = item.get('content', '')
-                        if "全市场共" in content and "涨停" in content and date_keyword in content:
+                        if "全市场共" in content and date_keyword in content:
                             target_text = content
-                            print("✅ 已从 API 响应中截获目标数据！")
-                except:
-                    pass
+                except: pass
 
         page.on("response", handle_response)
-        page.goto("https://www.cls.cn/telegraph", wait_until="networkidle", timeout=60000)
+        page.goto("https://www.cls.cn/telegraph", wait_until="networkidle", timeout=45000)
         
         if not target_text:
-            print("💡 第一页未找到，正在向下滚动触发加载...")
-            for _ in range(12): # 增加滚动次数以找回旧数据
+            for _ in range(8):
                 page.mouse.wheel(0, 3000)
                 page.wait_for_timeout(1000)
                 if target_text: break
-
         browser.close()
-        
-        if not target_text:
-            raise Exception(f"🔎 未发现 {date_keyword} 的总结电报。")
+    return target_text
 
-        # --- 核心解析逻辑 ---
-        try:
-            # 这里的正则增加了对空格和换行的兼容
-            zt = re.search(r"共\s*(\d+)\s*股涨停", target_text).group(1)
-            lb = re.search(r"连板股总数\s*(\d+)\s*只", target_text).group(1)
-            fail = re.search(r"(\d+)\s*股封板未遂", target_text).group(1)
-            rate = re.search(r"封板率为\s*(\d+%)", target_text).group(1)
-            focus = re.search(r"焦点股方面，(.*?)(?:。|$)", target_text, re.S).group(1).strip()
-            
-            return (f"📊 财联社盘后分析 ({date_keyword})\n\n"
-                    f"✅ 涨停总数：{zt}\n"
-                    f"🔗 连板总数：{lb}\n"
-                    f"❌ 封板未遂：{fail}\n"
-                    f"📈 封板率：{rate}\n\n"
-                    f"🔥 焦点股：\n{focus}")
-        except Exception as e:
-            raise Exception(f"解析失败: {e}\n抓取内容: {target_text[:50]}...")
+# --- 方案 B: 百度搜索回退 ---
+def scrape_via_search(date_keyword):
+    print(f"🔍 [方案 B] 方案 A 失败，启动百度搜索回退...")
+    query = f'site:cls.cn "今日全市场共" "涨停" "{date_keyword}"'
+    url = f"https://www.baidu.com/s?wd={quote(query)}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        # 匹配包含核心信息的快照文本
+        match = re.search(r"今日全市场共.*?焦点股方面.*?(?=\s|…|\"|&|$)", resp.text, re.S)
+        if match:
+            print("✅ 从百度搜索中成功提取数据！")
+            return match.group(0)
+    except Exception as e:
+        print(f"百度搜索抓取异常: {e}")
+    return ""
+
+def parse_and_format(raw_text, date_keyword):
+    # 清理 HTML 标签（针对搜索结果）
+    raw_text = re.sub(r'<.*?>', '', raw_text)
+    try:
+        zt = re.search(r"共\s*(\d+)\s*股涨停", raw_text).group(1)
+        lb = re.search(r"连板股总数\s*(\d+)\s*只", raw_text).group(1)
+        fail = re.search(r"(\d+)\s*股封板未遂", raw_text).group(1)
+        rate = re.search(r"封板率为\s*(\d+%)", raw_text).group(1)
+        # 焦点股正则：匹配到句号或末尾
+        focus = re.search(r"焦点股方面，(.*?)(?:。|$)", raw_text, re.S).group(1).strip()
+        
+        return (f"📊 财联社盘后分析 ({date_keyword})\n\n"
+                f"✅ 涨停总数：{zt}\n"
+                f"🔗 连板总数：{lb}\n"
+                f"❌ 封板未遂：{fail}\n"
+                f"📈 封板率：{rate}\n\n"
+                f"🔥 焦点股：\n{focus}\n\n"
+                f"💡 数据来源：{'直接抓取' if 'A' in current_mode else '搜索引擎备份'}")
+    except Exception as e:
+        raise Exception(f"解析失败: {e}\n原文: {raw_text[:60]}...")
 
 if __name__ == "__main__":
-    t_date = get_target_date()
-    if is_trading_day(t_date):
-        try:
-            msg = scrape()
-            send_tg_msg(msg)
-            print("🎉 任务圆满完成！")
-        except Exception as e:
-            err_msg = f"❌ 抓取失败: {str(e)}"
-            print(err_msg)
-            send_tg_msg(err_msg)
-            sys.exit(1)
-    else:
-        send_tg_msg(f"💤 {t_date} 非交易日，程序已休眠。")
+    dt_str = get_target_date()
+    dt_obj = datetime.datetime.strptime(dt_str, '%Y-%m-%d')
+    date_key = f"{dt_obj.month}月{dt_obj.day}日"
+    
+    current_mode = "方案 A"
+    try:
+        # 1. 尝试方案 A
+        final_text = scrape_cls_direct(date_key)
+        
+        # 2. 如果 A 失败，尝试方案 B
+        if not final_text:
+            current_mode = "方案 B"
+            final_text = scrape_via_search(date_key)
+            
+        if not final_text:
+            raise Exception("所有抓取方案均未找到数据")
+            
+        # 3. 解析并发送
+        report = parse_and_format(final_text, date_key)
+        send_tg_msg(report)
+        print("🎉 任务圆满完成！")
+        
+    except Exception as e:
+        err_msg = f"❌ 最终抓取失败: {str(e)}"
+        print(err_msg)
+        send_tg_msg(err_msg)
+        sys.exit(1)
