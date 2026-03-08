@@ -44,44 +44,58 @@ def is_trading_day(date_str):
 def scrape():
     target_date_str = get_target_date()
     dt_obj = datetime.datetime.strptime(target_date_str, '%Y-%m-%d')
-    # 构造匹配关键词
     date_keyword = f"{dt_obj.month}月{dt_obj.day}日"
     
     with sync_playwright() as p:
+        # 1. 模拟真实浏览器指纹
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        print(f"🚀 开始抓取，目标日期关键词: {date_keyword}")
+        # 设置 User-Agent 为真实的 Chrome 浏览器
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800}
+        )
+        page = context.new_page()
         
-        page.goto("https://www.cls.cn/telegraph", wait_until="networkidle")
+        print(f"🚀 正在尝试访问财联社 (目标日期: {date_keyword})...")
         
-        # --- 增强滚动逻辑 ---
-        # 如果是历史日期，我们需要大幅度向下滚动
-        scroll_times = 15 if DEBUG_DATE else 3
-        for i in range(scroll_times):
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.wait_for_timeout(800) # 等待加载
-        
+        # 2. 增加重试逻辑和等待条件
+        try:
+            page.goto("https://www.cls.cn/telegraph", wait_until="domcontentloaded", timeout=60000)
+            # 等待具体的电报列表 DOM 元素出现
+            page.wait_for_selector(".telegraph-list", timeout=30000)
+            # 额外等待 3 秒确保 JS 渲染完毕
+            page.wait_for_timeout(3000) 
+        except Exception as e:
+            print(f"⚠️ 页面加载超时或元素未发现: {e}")
+
+        # 3. 即使加载了 0 条，也强行滚动一下尝试触发加载
+        page.evaluate("window.scrollTo(0, 1000)")
+        page.wait_for_timeout(2000)
+
+        # 4. 获取电报条目
         items = page.locator(".telegraph-list .item").all()
-        print(f"📋 当前页面已加载 {len(items)} 条电报")
+        print(f"📋 当前页面成功捕获条目数: {len(items)}")
+
+        # 调试：如果还是 0，打印当前页面标题，确认是否跳到了验证码页面
+        if len(items) == 0:
+            print(f"🔎 页面标题为: {page.title()}")
+            # 截图保存（在 GitHub Actions 中可以通过 Artifacts 查看，但这里我们先打印 HTML 长度）
+            content_len = len(page.content())
+            print(f"📄 页面源代码长度: {content_len}")
 
         target_text = ""
         for item in items:
             text = item.inner_text()
-            # 这里的判断逻辑稍微放宽：只要包含“涨停”和“共X股”以及日期即可
-            if "涨停" in text and "共" in text and "股" in text and date_keyword in text:
+            if "全市场共" in text and "涨停" in text and date_keyword in text:
                 target_text = text
                 break
         
-        if not target_text:
-            # 调试：打印出前 3 条电报看看，确认爬虫是否真的进到了页面
-            print("⚠️ 未找到目标。页面前 3 条电报如下：")
-            for i in range(min(3, len(items))):
-                print(f"[{i}]: {items[i].inner_text()[:50]}...")
-            browser.close()
-            raise Exception(f"🔎 在 {len(items)} 条电报中未发现 {date_keyword} 的总结数据")
-
         browser.close()
-        # ... 保持后续正则解析逻辑不变 ...
+        
+        if not target_text:
+            raise Exception(f"🔎 在 {len(items)} 条电报中未发现 {date_keyword} 的总结数据。页面可能触发了验证码或加载失败。")
+
+        # ... 后续正则解析保持不变 ...
         
         if not target_text:
             raise Exception(f"未找到 {date_keyword} 的相关数据条目")
