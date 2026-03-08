@@ -13,6 +13,13 @@ import config
 
 import config
 
+from notify.telegram_bot import TelegramBot
+import config
+
+# 测试 Telegram 推送
+bot = TelegramBot(config.TELEGRAM_TOKEN, config.TELEGRAM_CHAT_ID)
+bot.send_message("GitHub 测试消息")
+
 print("TOKEN:", config.TELEGRAM_TOKEN)
 print("CHAT_ID:", config.TELEGRAM_CHAT_ID)
 
