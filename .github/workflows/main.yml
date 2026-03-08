@@ -1,0 +1,25 @@
+name: Stock Scraper
+on:
+  schedule:
+    # 北京时间 15:45 (UTC 7:45)
+    - cron: '45 7 * * 1-5'
+  workflow_dispatch: # 支持手动触发测试
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          playwright install chromium
+      - name: Execute Script
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python main.py
