@@ -44,30 +44,44 @@ def is_trading_day(date_str):
 def scrape():
     target_date_str = get_target_date()
     dt_obj = datetime.datetime.strptime(target_date_str, '%Y-%m-%d')
+    # 构造匹配关键词
     date_keyword = f"{dt_obj.month}月{dt_obj.day}日"
     
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        print(f"正在访问财联社，检索日期关键词: {date_keyword}")
+        print(f"🚀 开始抓取，目标日期关键词: {date_keyword}")
         
         page.goto("https://www.cls.cn/telegraph", wait_until="networkidle")
         
-        # 调试模式下多滚屏几次，确保能看到旧电报
-        if DEBUG_DATE:
-            for _ in range(3):
-                page.mouse.wheel(0, 2000)
-                page.wait_for_timeout(1000)
-
+        # --- 增强滚动逻辑 ---
+        # 如果是历史日期，我们需要大幅度向下滚动
+        scroll_times = 15 if DEBUG_DATE else 3
+        for i in range(scroll_times):
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(800) # 等待加载
+        
         items = page.locator(".telegraph-list .item").all()
+        print(f"📋 当前页面已加载 {len(items)} 条电报")
+
         target_text = ""
         for item in items:
             text = item.inner_text()
-            if "全市场共" in text and "涨停" in text and date_keyword in text:
+            # 这里的判断逻辑稍微放宽：只要包含“涨停”和“共X股”以及日期即可
+            if "涨停" in text and "共" in text and "股" in text and date_keyword in text:
                 target_text = text
                 break
         
+        if not target_text:
+            # 调试：打印出前 3 条电报看看，确认爬虫是否真的进到了页面
+            print("⚠️ 未找到目标。页面前 3 条电报如下：")
+            for i in range(min(3, len(items))):
+                print(f"[{i}]: {items[i].inner_text()[:50]}...")
+            browser.close()
+            raise Exception(f"🔎 在 {len(items)} 条电报中未发现 {date_keyword} 的总结数据")
+
         browser.close()
+        # ... 保持后续正则解析逻辑不变 ...
         
         if not target_text:
             raise Exception(f"未找到 {date_keyword} 的相关数据条目")
