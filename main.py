@@ -56,7 +56,7 @@ def scrape_and_parse():
         return msg
 
 if __name__ == "__main__":
-    if is_trading_day():
+    if True:
         try:
             report = scrape_and_parse()
             send_tg_msg(report)
