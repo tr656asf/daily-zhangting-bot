@@ -11,6 +11,11 @@ from notify.telegram_bot import TelegramBot
 
 import config
 
+import config
+
+print("TOKEN:", config.TELEGRAM_TOKEN)
+print("CHAT_ID:", config.TELEGRAM_CHAT_ID)
+
 bot = TelegramBot(
     config.TELEGRAM_TOKEN,
     config.TELEGRAM_CHAT_ID
