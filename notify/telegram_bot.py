@@ -20,3 +20,15 @@ class TelegramBot:
         r = requests.post(self.url, json=payload)
 
         return r.json()
+def send_message(self, text):
+
+    payload = {
+        "chat_id": self.chat_id,
+        "text": text
+    }
+
+    r = requests.post(self.url, json=payload)
+
+    print(r.text)   # 加这一行
+
+    return r.json()
