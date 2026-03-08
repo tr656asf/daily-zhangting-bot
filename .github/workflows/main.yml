@@ -1,9 +1,13 @@
 name: Stock Scraper
 on:
   schedule:
-    # 北京时间 15:45 (UTC 7:45)
     - cron: '45 7 * * 1-5'
-  workflow_dispatch: # 支持手动触发测试
+  workflow_dispatch:
+    inputs:
+      debug_date:
+        description: '调试日期 (格式: YYYY-MM-DD，留空则运行当天)'
+        required: false
+        default: ''
 
 jobs:
   run:
@@ -12,14 +16,10 @@ jobs:
       - uses: actions/checkout@v3
       - name: Set up Python
         uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Install dependencies
-        run: |
-          pip install playwright requests
-          playwright install chromium
+        # ... 安装依赖步骤同前 ...
       - name: Execute Script
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          DEBUG_DATE: ${{ github.event.inputs.debug_date }} # 将网页输入传递给环境变量
         run: python main.py
