@@ -22,7 +22,11 @@ def fetch_limit_up(date=None):
         "date": date
     }
 
-    r = requests.get(url, params=params)
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    r = requests.get(url, params=params, headers=headers)
 
     data = r.json()
 
