@@ -1,10 +1,7 @@
 import datetime
 
-
 def generate_report(stats, focus, sectors):
-
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-
     text = f"""
 A股短线市场情绪日报
 {today}
@@ -18,18 +15,13 @@ A股短线市场情绪日报
 
 市场龙头：
 """
-
     for s in focus:
-
-        name = s.get("n")
-        days = s.get("days")
-
+        name = s.get("n", "未知")
+        days = s.get("days", 1)
         text += f"{name} {days}板\n"
 
     text += "\n热门板块：\n"
-
     for s in sectors:
-
         text += f"{s[0]}\n"
 
     return text
